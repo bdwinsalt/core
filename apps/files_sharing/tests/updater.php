@@ -51,8 +51,10 @@ class Test_Files_Sharing_Updater extends OCA\Files_Sharing\Tests\TestCase {
 	}
 
 	protected function tearDown() {
-		$this->view->unlink($this->filename);
-		$this->view->deleteAll($this->folder);
+		if ($this->view) {
+			$this->view->unlink($this->filename);
+			$this->view->deleteAll($this->folder);
+		}
 
 		parent::tearDown();
 	}
