@@ -19,6 +19,21 @@
  *
  */
 
+use OCA\DAV\CardDAV\CardDavBackend;
+use OCA\DAV\CardDAV\SyncService;
+use OCA\DAV\Connector\Sabre\Principal;
+
+\OC::$server->registerService('CardDAVSyncService', function() {
+	$principalBackend = new Principal(
+		$this->config,
+		$this->userManager
+	);
+
+	$backend = new CardDavBackend($this->dbConnection, $principalBackend);
+
+	return new SyncService($backend);
+});
+
 $cm = \OC::$server->getContactsManager();
 $cm->register(function() use ($cm) {
 	$db = \OC::$server->getDatabaseConnection();
@@ -27,9 +42,9 @@ $cm->register(function() use ($cm) {
 			\OC::$server->getConfig(),
 			\OC::$server->getUserManager()
 	);
-	$cardDav = new \OCA\DAV\CardDAV\CardDavBackend($db, $principal, \OC::$server->getLogger());
-	$addressBooks = $cardDav->getAddressBooksForUser("principals/$userId");
-	foreach ($addressBooks as $addressBookInfo)  {
+	$cardDav = new \OCA\DAV\CardDAV\CardDavBackend($db, $principal);
+	$addressBooks = $cardDav->getAddressBooksForUser("principals/users/$userId");
+	foreach ($addressBooks as $addressBookInfo) {
 		$addressBook = new \OCA\DAV\CardDAV\AddressBook($cardDav, $addressBookInfo);
 		$cm->registerAddressBook(
 				new OCA\DAV\CardDAV\AddressBookImpl(
