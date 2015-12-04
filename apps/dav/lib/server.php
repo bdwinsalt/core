@@ -7,6 +7,7 @@ use OCA\DAV\Connector\Sabre\Auth;
 use OCA\DAV\Connector\Sabre\BlockLegacyClientPlugin;
 use OCA\DAV\Files\CustomPropertiesBackend;
 use OCP\IRequest;
+use OCP\SabrePluginEvent;
 use Sabre\DAV\Auth\Plugin;
 use Sabre\HTTP\Util;
 
@@ -36,8 +37,12 @@ class Server {
 
 		$this->server->addPlugin(new BlockLegacyClientPlugin(\OC::$server->getConfig()));
 		$authPlugin = new Plugin($authBackend, 'ownCloud');
-		$authPlugin->addBackend(new FedAuth(\OC::$server->getDatabaseConnection()));
 		$this->server->addPlugin($authPlugin);
+
+		// allow setup of additional auth backends
+		$event = new SabrePluginEvent($this->server);
+		$dispatcher->dispatch('OCA\DAV\Connector\Sabre::authInit', $event);
+
 		$this->server->addPlugin(new \OCA\DAV\Connector\Sabre\DummyGetResponsePlugin());
 		$this->server->addPlugin(new \OCA\DAV\Connector\Sabre\ExceptionLoggerPlugin('webdav', $logger));
 		$this->server->addPlugin(new \OCA\DAV\Connector\Sabre\LockPlugin());
