@@ -117,5 +117,20 @@ describe('OCA.Sharing.PublicApp tests', function() {
 					.toEqual(OC.webroot + '/index.php/apps/files_sharing/ajax/test.php?a=1&b=x%20y&t=sh4tok');
 			});
 		});
+		describe('Upload Url', function() {
+			var fileList;
+
+			beforeEach(function() {
+				fileList = App.fileList;
+			});
+			it('returns correct upload URL', function() {
+				expect(fileList.getUploadUrl('some file.txt'))
+					.toEqual('/owncloud/public.php/webdav/subdir/some file.txt');
+			});
+			it('returns correct upload URL with specified dir', function() {
+				expect(fileList.getUploadUrl('some file.txt', 'sub'))
+					.toEqual('/owncloud/public.php/webdav/subdir/sub/some file.txt');
+			});
+		});
 	});
 });

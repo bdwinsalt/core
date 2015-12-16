@@ -153,7 +153,8 @@ describe('OCA.Files.FileList tests', function() {
 		})];
 		pageSizeStub = sinon.stub(OCA.Files.FileList.prototype, 'pageSize').returns(20);
 		fileList = new OCA.Files.FileList($('#app-content-files'), {
-			filesClient: filesClient
+			filesClient: filesClient,
+			enableUpload: true
 		});
 	});
 	afterEach(function() {

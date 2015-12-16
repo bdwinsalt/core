@@ -71,7 +71,8 @@ OCA.Sharing.PublicApp = {
 					folderDropOptions: folderDropOptions,
 					fileActions: fileActions,
 					detailsViewEnabled: false,
-					filesClient: filesClient
+					filesClient: filesClient,
+					enableUpload: true
 				}
 			);
 			this.files = OCA.Files.Files;
@@ -165,6 +166,24 @@ OCA.Sharing.PublicApp = {
 					files: filename
 				};
 				return OC.generateUrl('/s/' + token + '/download') + '?' + OC.buildQueryString(params);
+			};
+
+			this.fileList.getUploadUrl = function(fileName, dir) {
+				if (_.isUndefined(dir)) {
+					dir = this.getCurrentDirectory();
+				}
+
+				var pathSections = dir.split('/');
+				if (!_.isUndefined(fileName)) {
+					pathSections.push(fileName);
+				}
+				var encodedPath = '';
+				_.each(pathSections, function(section) {
+					if (section !== '') {
+						encodedPath += '/' + encodeURIComponent(section);
+					}
+				});
+				return OC.getRootPath() + '/public.php/webdav' + encodedPath;
 			};
 
 			this.fileList.getAjaxUrl = function (action, params) {

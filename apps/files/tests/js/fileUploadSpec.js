@@ -19,11 +19,11 @@
 *
 */
 
-/* global FileList */
-
 describe('OC.Upload tests', function() {
 	var $dummyUploader;
 	var testFile;
+	var uploader;
+	var failStub;
 
 	beforeEach(function() {
 		testFile = {
@@ -46,39 +46,31 @@ describe('OC.Upload tests', function() {
 			'</div>'
 		);
 		$dummyUploader = $('#file_upload_start');
+		uploader = new OC.Uploader($('#file_upload_start'));
+		failStub = sinon.stub();
+		$dummyUploader.on('fileuploadfail', failStub);
 	});
 	afterEach(function() {
-		delete window.file_upload_param;
 		$dummyUploader = undefined;
+		failStub = undefined;
 	});
+
+	/**
+	 * Add file for upload
+	 * @param file file data
+	 */
+	function addFile(file) {
+		return uploader.fileUploadParam.add.call(
+				$dummyUploader[0],
+				{},
+				{
+				originalFiles: {},
+				files: [file],
+				jqXHR: {status: 200}
+			});
+	}
+
 	describe('Adding files for upload', function() {
-		var params;
-		var failStub;
-
-		beforeEach(function() {
-			params = OC.Upload.init();
-			failStub = sinon.stub();
-			$dummyUploader.on('fileuploadfail', failStub);
-		});
-		afterEach(function() {
-			params = undefined;
-			failStub = undefined;
-		});
-
-		/**
-		 * Add file for upload
-		 * @param file file data
-		 */
-		function addFile(file) {
-			return params.add.call(
-					$dummyUploader[0],
-					{},
-					{
-					originalFiles: {},
-					files: [file]
-				});
-		}
-
 		it('adds file when size is below limits', function() {
 			var result = addFile(testFile);
 			expect(result).toEqual(true);
@@ -120,12 +112,12 @@ describe('OC.Upload tests', function() {
 		});
 	});
 	describe('Upload conflicts', function() {
-		var oldFileList;
+		var uploader;
 		var conflictDialogStub;
 		var callbacks;
+		var fileList;
 
 		beforeEach(function() {
-			oldFileList = FileList;
 			$('#testArea').append(
 				'<div id="tableContainer">' +
 				'<table id="filestable">' +
@@ -145,52 +137,40 @@ describe('OC.Upload tests', function() {
 				'</table>' +
 				'</div>'
 			);
-			FileList = new OCA.Files.FileList($('#tableContainer'));
+			fileList = new OCA.Files.FileList($('#tableContainer'));
 
-			FileList.add({name: 'conflict.txt', mimetype: 'text/plain'});
-			FileList.add({name: 'conflict2.txt', mimetype: 'text/plain'});
+			fileList.add({name: 'conflict.txt', mimetype: 'text/plain'});
+			fileList.add({name: 'conflict2.txt', mimetype: 'text/plain'});
 
 			conflictDialogStub = sinon.stub(OC.dialogs, 'fileexists');
 			callbacks = {
 				onNoConflicts: sinon.stub()
 			};
+
+			uploader = new OC.Uploader($(), {
+				fileList: fileList
+			});
 		});
 		afterEach(function() {
 			conflictDialogStub.restore();
 
-			FileList.destroy();
-			FileList = oldFileList;
+			fileList.destroy();
 		});
 		it('does not show conflict dialog when no client side conflict', function() {
-			var selection = {
-				// yes, the format of uploads is weird...
-				uploads: [
-					{files: [{name: 'noconflict.txt'}]},
-					{files: [{name: 'noconflict2.txt'}]}
-				]
-			};
-
-			OC.Upload.checkExistingFiles(selection, callbacks);
+			addFile({name: 'noconflict.txt'});
+			addFile({name: 'noconflict2.txt'});
 
 			expect(conflictDialogStub.notCalled).toEqual(true);
 			expect(callbacks.onNoConflicts.calledOnce).toEqual(true);
-			expect(callbacks.onNoConflicts.calledWith(selection)).toEqual(true);
 		});
 		it('shows conflict dialog when no client side conflict', function() {
-			var selection = {
-				// yes, the format of uploads is weird...
-				uploads: [
-					{files: [{name: 'conflict.txt'}]},
-					{files: [{name: 'conflict2.txt'}]},
-					{files: [{name: 'noconflict.txt'}]}
-				]
-			};
-
 			var deferred = $.Deferred();
 			conflictDialogStub.returns(deferred.promise());
 			deferred.resolve();
 
-			OC.Upload.checkExistingFiles(selection, callbacks);
+			addFile({name: 'conflict.txt'});
+			addFile({name: 'conflict2.txt'});
+			addFile({name: 'noconflict.txt'});
 
 			expect(conflictDialogStub.callCount).toEqual(3);
 			expect(conflictDialogStub.getCall(1).args[0])
