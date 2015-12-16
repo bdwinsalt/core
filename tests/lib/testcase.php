@@ -150,11 +150,14 @@ abstract class TestCase extends \PHPUnit_Framework_TestCase {
 
 	public static function tearDownAfterClass() {
 		$dataDir = \OC::$server->getConfig()->getSystemValue('datadirectory', \OC::$SERVERROOT . '/data-autotest');
-		$queryBuilder = \OC::$server->getDatabaseConnection()->getQueryBuilder();
+		$connection = \OC::$server->getDatabaseConnection();
+		if ($connection) {// only run this cleanup if the test had db access
+			$queryBuilder = $connection->getQueryBuilder();
 
 		self::tearDownAfterClassCleanShares($queryBuilder);
 		self::tearDownAfterClassCleanStorages($queryBuilder);
 		self::tearDownAfterClassCleanFileCache($queryBuilder);
+			}
 		self::tearDownAfterClassCleanStrayDataFiles($dataDir);
 		self::tearDownAfterClassCleanStrayHooks();
 		self::tearDownAfterClassCleanStrayLocks();
