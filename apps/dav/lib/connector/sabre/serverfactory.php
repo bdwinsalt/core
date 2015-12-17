@@ -132,6 +132,7 @@ class ServerFactory {
 			}
 			$objectTree->init($root, $view, $this->mountManager);
 
+			$server->addPlugin(new \OCA\DAV\Connector\Sabre\IframeTransportPlugin());
 			$server->addPlugin(new \OCA\DAV\Connector\Sabre\FilesPlugin($objectTree, $view));
 			$server->addPlugin(new \OCA\DAV\Connector\Sabre\QuotaPlugin($view));
 

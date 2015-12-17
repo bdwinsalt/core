@@ -18,7 +18,7 @@
  *    - TODO music upload button
  */
 
-/* global jQuery, oc_requesttoken, humanFileSize, FileList */
+/* global jQuery, humanFileSize */
 
 /**
  * Function that will allow us to know if Ajax uploads are supported
@@ -45,26 +45,6 @@ function supportAjaxUploadWithProgress() {
 	function supportFormData() {
 		return !! window.FormData;
 	}
-}
-
-/**
- * Add form data into the given form data
- *
- * @param {Array|Object} formData form data which can either be an array or an object
- * @param {Object} newData key-values to add to the form data
- *
- * @return updated form data
- */
-function addFormData(formData, newData) {
-	// in IE8, formData is an array instead of object
-	if (_.isArray(formData)) {
-		_.each(newData, function(value, key) {
-			formData.push({name: key, value: value});
-		});
-	} else {
-		formData = _.extend(formData, newData);
-	}
-	return formData;
 }
 
 /**
@@ -184,6 +164,14 @@ OC.FileUpload.prototype = {
 			this.data.headers['X-OC-Mtime'] = file.lastModified / 1000;
 		}
 
+		if (!this.uploader.isXHRUpload()) {
+			data.formData = [];
+
+			// pass headers as parameters
+			data.formData.push({name: 'headers', value: JSON.stringify(this.data.headers)});
+			data.formData.push({name: 'requesttoken', value: OC.requestToken});
+		}
+
 		// wait for creation of the required directory before uploading
 		folderPromise.then(function() {
 			data.submit();
@@ -198,6 +186,38 @@ OC.FileUpload.prototype = {
 	 */
 	abort: function() {
 		this.data.abort();
+	},
+
+	/**
+	 * Returns the server response
+	 *
+	 * @return {Object} response
+	 */
+	getResponse: function() {
+		var response = this.data.response();
+		if (typeof response.result !== 'string') {
+			//fetch response from iframe
+			response = $.parseJSON(response.result[0].body.innerText);
+			if (!response) {
+				// likely due to internal server error
+				response = {status: 500};
+			}
+		} else {
+			response = response.result;
+		}
+		return response;
+	},
+
+	/**
+	 * Returns the status code from the response
+	 *
+	 * @return {int} status code
+	 */
+	getResponseStatus: function() {
+		if (this.uploader.isXHRUpload()) {
+			return this.data.response().jqXHR.status;
+		}
+		return this.getResponse().status;
 	}
 };
 
@@ -233,6 +253,18 @@ OC.Uploader.prototype = {
 	 * @type OC.Files.Client
 	 */
 	filesClient: null,
+
+	/**
+	 * Returns whether an XHR upload will be used
+	 *
+	 * @return {bool} true if XHR upload will be used,
+	 * false for iframe upload
+	 */
+	isXHRUpload: function () {
+		return !this.fileUploadParam.forceIframeTransport &&
+			((!this.fileUploadParam.multipart && $.support.xhrFileUpload) ||
+			$.support.xhrFormDataFileUpload);
+	},
 
 	/**
 	 * Makes sure that the upload folder and its parents exists
@@ -274,7 +306,6 @@ OC.Uploader.prototype = {
 			}
 
 			parentPromise.then(function() {
-				console.log('createDirectory: ' + fullPath);
 				self.filesClient.createDirectory(fullPath).always(function(status) {
 					// 405 is expected if the folder already exists
 					if ((status >= 200 && status < 300) || status === 405) {
@@ -328,15 +359,20 @@ OC.Uploader.prototype = {
 	 */
 	cancelUploads:function() {
 		this.log('canceling uploads');
-		jQuery.each(this._uploads, function(i, jqXHR) {
-			jqXHR.abort();
+		jQuery.each(this._uploads, function(i, upload) {
+			upload.abort();
 		});
 		this._uploads = [];
 		this._knownDirs = {};
 	},
-	rememberUpload:function(jqXHR) {
-		if (jqXHR) {
-			this._uploads.push(jqXHR);
+	/**
+	 * Remember upload
+	 *
+	 * @param {OC.FileUpload} upload
+	 */
+	rememberUpload:function(upload) {
+		if (upload) {
+			this._uploads.push(upload);
 		}
 	},
 	showUploadCancelMessage: _.debounce(function() {
@@ -413,18 +449,6 @@ OC.Uploader.prototype = {
 		this.log('autorename', null, upload);
 		// TODO
 		console.error('NOT IMPLEMENTED');
-		/*
-		if (data.data) {
-			// TODO: the webdav way
-			data.data.append('resolution', 'autorename');
-		} else {
-			if (!data.formData) {
-				data.formData = {};
-			}
-			addFormData(data.formData, {resolution: 'autorename'});
-		}
-		data.submit();
-		*/
 	},
 	_trace:false, //TODO implement log handler for JS per class?
 	log:function(caption, e, data) {
@@ -601,7 +625,7 @@ OC.Uploader.prototype = {
 					}
 
 					// TODO: provide a way to inject target folder
-					upload.setTargetFolder(data.targetDir || FileList.getCurrentDirectory());
+					upload.setTargetFolder(data.targetDir || self.fileList.getCurrentDirectory());
 					delete data.targetDir;
 
 					// in case folder drag and drop is not supported file will point to a directory
@@ -657,7 +681,7 @@ OC.Uploader.prototype = {
 
 					// end upload for whole selection on error
 					if (data.errorThrown) {
-						// trigger fileupload fail
+						// trigger fileupload fail handler
 						var fu = that.data('blueimp-fileupload') || that.data('fileupload');
 						fu._trigger('fail', e, data);
 						return false; //don't upload anything
@@ -709,9 +733,10 @@ OC.Uploader.prototype = {
 					self.rememberUpload(data.upload);
 				},
 				fail: function(e, data) {
-					self.log('fail', e, data);
+					var upload = data.upload;
+					self.log('fail', e, upload);
 
-					var status = data.jqXHR.status;
+					var status = upload.getResponseStatus();
 					data.upload.deleteUpload();
 					if (data.textStatus === 'abort') {
 						self.showUploadCancelMessage();
@@ -742,12 +767,14 @@ OC.Uploader.prototype = {
 				 * @param {object} data
 				 */
 				done:function(e, data) {
-					self.log('done', e, data);
-					// handle different responses (json or body from iframe for ie)
-					var status = data.jqXHR.status;
+					var upload = data.upload;
+					var that = $(this);
+					self.log('done', e, upload);
+
+					var status = upload.getResponseStatus();
 					if (status < 200 || status >= 300) {
-						// error
-						console.error('error: ' + status, data);
+						// trigger fail handler
+						var fu = that.data('blueimp-fileupload') || that.data('fileupload');
 						fu._trigger('fail', e, data);
 						return;
 					}
@@ -762,7 +789,7 @@ OC.Uploader.prototype = {
 				}
 			};
 
-			// initialize jquery fileupload (nlueimp)
+			// initialize jquery fileupload (blueimp)
 			var fileupload = this.$uploadEl.fileupload(this.fileUploadParam);
 
 			if (supportAjaxUploadWithProgress()) {
