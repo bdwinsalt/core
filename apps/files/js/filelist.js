@@ -2579,9 +2579,7 @@
 					return;
 				}
 
-				var file = data.upload.getFile();
-
-				self.addAndFetchFileInfo(OC.basename(file.name), OC.dirname(data.upload.getFullPath() + '/'), {replace: true});
+				self.addAndFetchFileInfo(OC.basename(data.upload.getFileName()), OC.dirname(data.upload.getFullPath() + '/'), {replace: true});
 			});
 			$uploadEl.on('fileuploadstop', function(e, data) {
 				self._uploader.log('filelist handle fileuploadstop', e, data);

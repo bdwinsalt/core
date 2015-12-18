@@ -62,6 +62,9 @@ OC.FileUpload = function(uploader, data) {
 	this.uploader = uploader;
 	this.data = data;
 };
+OC.FileUpload.CONFLICT_MODE_DETECT = 0;
+OC.FileUpload.CONFLICT_MODE_OVERWRITE = 1;
+OC.FileUpload.CONFLICT_MODE_AUTORENAME = 2;
 OC.FileUpload.prototype = {
 
 	/**
@@ -79,9 +82,16 @@ OC.FileUpload.prototype = {
 	_targetFolder: null,
 
 	/**
-	 * @type bool
+	 * @type int
 	 */
-	_overwrite: false,
+	_conflictMode: OC.FileUpload.CONFLICT_MODE_DETECT,
+
+	/**
+	 * New name from server after autorename
+	 *
+	 * @type String
+	 */
+	_newName: null,
 
 	/**
 	 * Returns the file to be uploaded
@@ -92,7 +102,28 @@ OC.FileUpload.prototype = {
 		return this.data.files[0];
 	},
 
+	/**
+	 * Return the final filename.
+	 * Either this is the original file name or the file name
+	 * after an autorename.
+	 *
+	 * @return {String} file name
+	 */
 	getFileName: function() {
+		// in case of autorename
+		if (this._newName) {
+			return this._newName;
+		}
+
+		if (this._conflictMode === OC.FileUpload.CONFLICT_MODE_AUTORENAME) {
+
+			var locationUrl = this.getResponseHeader('Location');
+			if (locationUrl) {
+				this._newName = OC.basename(locationUrl);
+				return this._newName;
+			}
+		}
+
 		return this.getFile().name;
 	},
 
@@ -114,10 +145,11 @@ OC.FileUpload.prototype = {
 	},
 
 	/**
-	 * Sets whether the file must be overwritten on upload
+	 * Set conflict resolution mode.
+	 * See CONFLICT_MODE_* constants.
 	 */
-	setOverwrite: function(flag) {
-		this._overwrite = flag;
+	setConflictMode: function(mode) {
+		this._conflictMode = mode;
 	},
 
 	isPending: function() {
@@ -151,12 +183,15 @@ OC.FileUpload.prototype = {
 
 		// webdav without multipart
 		this.data.multipart = false;
+		this.data.type = 'PUT';
 
-		// do not overwrite files at first
-		if (this._overwrite) {
-			delete this.data.headers['If-None-Match'];
-		} else {
+		delete this.data.headers['If-None-Match'];
+		if (this._conflictMode === OC.FileUpload.CONFLICT_MODE_DETECT) {
 			this.data.headers['If-None-Match'] = '*';
+		} else if (this._conflictMode === OC.FileUpload.CONFLICT_MODE_AUTORENAME) {
+			// POST to parent folder, with slug
+			this.data.type = 'POST';
+			this.data.url = this.uploader.fileList.getUploadUrl('&' + file.name, this.getFullPath());
 		}
 
 		if (file.lastModified) {
@@ -464,7 +499,7 @@ OC.Uploader.prototype = {
 	 */
 	onReplace:function(upload) {
 		this.log('replace', null, upload);
-		upload.setOverwrite(true);
+		upload.setConflictMode(OC.FileUpload.CONFLICT_MODE_OVERWRITE);
 		upload.submit();
 	},
 	/**
@@ -473,8 +508,8 @@ OC.Uploader.prototype = {
 	 */
 	onAutorename:function(upload) {
 		this.log('autorename', null, upload);
-		// TODO
-		console.error('NOT IMPLEMENTED');
+		upload.setConflictMode(OC.FileUpload.CONFLICT_MODE_AUTORENAME);
+		upload.submit();
 	},
 	_trace:false, //TODO implement log handler for JS per class?
 	log:function(caption, e, data) {
