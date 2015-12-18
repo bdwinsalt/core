@@ -61,31 +61,34 @@ class IFrameTransportPlugin extends \Sabre\DAV\ServerPlugin {
 		try {
 			return $this->processUpload($request, $response);
 		} catch (\Sabre\DAV\Exception $e) {
-			$this->respond($response, $e->getHTTPCode(), [
-				'message' => $e->getMessage()
-			]);
+			$response->setStatus($e->getHTTPCode());
+			$response->setBody(['message' => $e->getMessage()]);
+			$this->convertResponse($response);
 			return false;
 		}
 	}
 
 	/**
-	 * Send response in JSON format
+	 * Wrap and send response in JSON format
 	 *
 	 * @param ResponseInterface $response response object
-	 * @param int $status status code
-	 * @param string|array $data response data
 	 */
-	private function respond(ResponseInterface $response, $status, $data) {
+	private function convertResponse(ResponseInterface $response) {
+		if (is_resource($response->getBody())) {
+			throw new BadRequest('Cannot request binary data with iframe transport');
+		}
+
+		$responseData = json_encode([
+			'status' => $response->getStatus(),
+			'headers' => $response->getHeaders(),
+			'data' => $response->getBody(),
+		]);
+
 		// IE needs this content type
 		$response->setHeader('Content-Type', 'text/plain');
+		$response->setHeader('Content-Length', strlen($responseData));
 		$response->setStatus(200);
-		if (!is_string($data)) {
-			$data = json_encode($data);
-		}
-		$response->setBody(json_encode([
-			'status' => $status,
-			'data' => $data,
-		]));
+		$response->setBody($responseData);
 	}
 
 	/**
@@ -160,40 +163,24 @@ class IFrameTransportPlugin extends \Sabre\DAV\ServerPlugin {
 					$request->setHeader($allowedHeader, $headers[$allowedHeader]);
 				}
 			}
-
-			// check preconditions again with new headers
-			$this->server->checkPreconditions($request, $response);
 		}
 
 		// MEGAHACK, because the Sabre File impl reads this property directly
 		$_SERVER['CONTENT_LENGTH'] = $file['size'][0];
-
-		$etag = null;
+		$request->setHeader('Content-Length', $file['size'][0]);
 
 		$tmpFile = $file['tmp_name'][0];
 		$resource = fopen($tmpFile, 'r');
 
-		$path = $request->getPath();
-		if ($this->server->tree->nodeExists($path)) {
-			$node = $this->server->tree->getNodeForPath($path);
+		$request->setBody($resource);
+		$request->setMethod($method);
 
-			// If the node is a collection, we'll deny it
-			if (!($node instanceof IFile)) throw new Exception\Conflict('PUT is not allowed on non-files.');
+		$this->server->invokeMethod($request, $response, false);
 
-			$result = $this->server->updateFile($path, $resource, $etag);
-		} else {
-			$result = $this->server->createFile($path, $resource, $etag);
-		}
 		fclose($resource);
 		unlink($tmpFile);
 
-		if (!$result) {
-			return false;
-		}
-
-		$this->respond($response, 201, [
-			'etag' => $etag
-		]);
+		$this->convertResponse($response);
 
 		return false;
 	}

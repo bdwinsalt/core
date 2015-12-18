@@ -218,6 +218,32 @@ OC.FileUpload.prototype = {
 			return this.data.response().jqXHR.status;
 		}
 		return this.getResponse().status;
+	},
+
+	/**
+	 * Returns the response header by name
+	 *
+	 * @param {String} headerName header name
+	 * @return {Array|String} response header value(s)
+	 */
+	getResponseHeader: function(headerName) {
+		headerName = headerName.toLowerCase();
+		if (this.uploader.isXHRUpload()) {
+			return this.data.response().jqXHR.getResponseHeader(headerName);
+		}
+
+		var headers = this.getResponse().headers;
+		if (!headers) {
+			return null;
+		}
+
+		var value =  _.find(headers, function(value, key) {
+			return key.toLowerCase() === headerName;
+		});
+		if (_.isArray(value) && value.length === 1) {
+			return value[0];
+		}
+		return value;
 	}
 };
 
