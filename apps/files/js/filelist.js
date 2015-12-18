@@ -2092,7 +2092,7 @@
 			if ((OC.dirname(targetPath) || '/') !== this.getCurrentDirectory()) {
 				// no need to fetch information
 				deferred.resolve();
-				return;
+				return deferred.promise();
 			}
 
 			var addOptions = _.extend({
@@ -2563,6 +2563,10 @@
 					}
 				}
 
+				if (!data.targetDir) {
+					data.targetDir = self.getCurrentDirectory();
+				}
+
 			});
 			/*
 			 * when file upload done successfully add row to filelist
@@ -2580,6 +2584,9 @@
 				}
 
 				self.addAndFetchFileInfo(OC.basename(data.upload.getFileName()), OC.dirname(data.upload.getFullPath() + '/'), {replace: true});
+			});
+			$uploadEl.on('fileuploadcreatedfolder', function(e, fullPath) {
+				self.addAndFetchFileInfo(OC.basename(fullPath), OC.dirname(fullPath), {replace: true});
 			});
 			$uploadEl.on('fileuploadstop', function(e, data) {
 				self._uploader.log('filelist handle fileuploadstop', e, data);

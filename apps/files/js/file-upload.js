@@ -366,18 +366,13 @@ OC.Uploader.prototype = {
 			var parentPromise = this._knownDirs[parentPath];
 			if (!parentPromise) {
 				parentPromise = this.ensureFolderExists(parentPath);
-			} else {
-				parentPromise = $.Deferred().resolve().promise();
 			}
 
 			parentPromise.then(function() {
 				self.filesClient.createDirectory(fullPath).always(function(status) {
 					// 405 is expected if the folder already exists
 					if ((status >= 200 && status < 300) || status === 405) {
-						// TODO: do this with events instead
-						if (self.fileList) {
-							self.fileList.addAndFetchFileInfo(OC.basename(fullPath), OC.dirname(fullPath), {scrollTo:true, replace:true});
-						}
+						self.$uploadEl.trigger($.Event('fileuploadcreatedfolder'), fullPath);
 						deferred.resolve();
 						return;
 					}
@@ -544,6 +539,10 @@ OC.Uploader.prototype = {
 				// can't check in subfolder contents
 				return true;
 			}
+			if (!fileList) {
+				// no list to check against
+				return true;
+			}
 			var fileInfo = fileList.findFile(file.name);
 			if (fileInfo) {
 				conflicts.push([
@@ -689,8 +688,7 @@ OC.Uploader.prototype = {
 						data.errorThrown = errorMessage;
 					}
 
-					// TODO: provide a way to inject target folder
-					upload.setTargetFolder(data.targetDir || self.fileList.getCurrentDirectory());
+					upload.setTargetFolder(data.targetDir);
 					delete data.targetDir;
 
 					// in case folder drag and drop is not supported file will point to a directory
