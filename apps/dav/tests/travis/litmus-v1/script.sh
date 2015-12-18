@@ -4,7 +4,7 @@ SCRIPTPATH=`dirname $SCRIPT`
 
 
 # start the server
-php -S 127.0.0.1:8888 -t "$SCRIPTPATH/../../../.." &
+php -S 127.0.0.1:8888 -t "$SCRIPTPATH/../../../../.." &
 
 # run the tests
 cd /tmp/litmus/litmus-0.13
