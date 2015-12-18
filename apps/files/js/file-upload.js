@@ -250,7 +250,11 @@ OC.FileUpload.prototype = {
 	 */
 	getResponseStatus: function() {
 		if (this.uploader.isXHRUpload()) {
-			return this.data.response().jqXHR.status;
+			var xhr = this.data.response().jqXHR;
+			if (xhr) {
+				return xhr.status;
+			}
+			return null;
 		}
 		return this.getResponse().status;
 	},
@@ -795,32 +799,32 @@ OC.Uploader.prototype = {
 				},
 				fail: function(e, data) {
 					var upload = data.upload;
+					var status = upload.getResponseStatus();
 					self.log('fail', e, upload);
 
-					var status = upload.getResponseStatus();
-					data.upload.deleteUpload();
 					if (data.textStatus === 'abort') {
 						self.showUploadCancelMessage();
-						return;
-					}
-
-					// file already exists
-					if (status === 412) {
+					} else if (status === 412) {
+						// file already exists
 						self.showConflict(data.upload);
-						return;
-					}
-
-					// target folder does not exist any more
-					if (status === 404) {
+					} else if (status === 404) {
+						// target folder does not exist any more
 						OC.Notification.showTemporary(
 							t('files', 'Target folder "{dir}" does not exist any more', {dir: data.upload.getFullPath()})
 						);
 						self.cancelUploads();
-						return;
+					} else if (status === 507) {
+						// not enough space
+						OC.Notification.showTemporary(
+							t('files', 'Not enough free space')
+						);
+						self.cancelUploads();
+					} else {
+						// HTTP connection problem or other error
+						OC.Notification.showTemporary(data.errorThrown, {timeout: 10});
 					}
 
-					// HTTP connection problem
-					OC.Notification.showTemporary(data.errorThrown, {timeout: 10});
+					data.upload.deleteUpload();
 				},
 				/**
 				 * called for every successful upload
